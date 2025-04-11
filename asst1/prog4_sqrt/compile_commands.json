@@ -1,0 +1,74 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-march=native",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-c",
+      "-o",
+      "objs/main.o",
+      "main.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt",
+    "file": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/main.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/objs/main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-march=native",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-c",
+      "-o",
+      "objs/sqrtSerial.o",
+      "sqrtSerial.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt",
+    "file": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/sqrtSerial.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/objs/sqrtSerial.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-march=native",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-c",
+      "-o",
+      "objs/ppm.o",
+      "../common/ppm.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt",
+    "file": "/home/bigerrr/cs149_assignments/asst1/common/ppm.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/objs/ppm.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-march=native",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-c",
+      "-o",
+      "objs/tasksys.o",
+      "../common/tasksys.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt",
+    "file": "/home/bigerrr/cs149_assignments/asst1/common/tasksys.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog4_sqrt/objs/tasksys.o"
+  }
+]

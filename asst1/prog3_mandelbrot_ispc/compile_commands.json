@@ -1,0 +1,78 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-fPIC",
+      "-ffp-contract=off",
+      "-c",
+      "-o",
+      "objs/main.o",
+      "main.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc",
+    "file": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/main.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/objs/main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-fPIC",
+      "-ffp-contract=off",
+      "-c",
+      "-o",
+      "objs/mandelbrotSerial.o",
+      "mandelbrotSerial.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc",
+    "file": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/mandelbrotSerial.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/objs/mandelbrotSerial.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-fPIC",
+      "-ffp-contract=off",
+      "-c",
+      "-o",
+      "objs/ppm.o",
+      "../common/ppm.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc",
+    "file": "/home/bigerrr/cs149_assignments/asst1/common/ppm.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/objs/ppm.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-m64",
+      "-I../common",
+      "-Iobjs/",
+      "-O3",
+      "-Wall",
+      "-fPIC",
+      "-ffp-contract=off",
+      "-c",
+      "-o",
+      "objs/tasksys.o",
+      "../common/tasksys.cpp"
+    ],
+    "directory": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc",
+    "file": "/home/bigerrr/cs149_assignments/asst1/common/tasksys.cpp",
+    "output": "/home/bigerrr/cs149_assignments/asst1/prog3_mandelbrot_ispc/objs/tasksys.o"
+  }
+]
