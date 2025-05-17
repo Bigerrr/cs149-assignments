@@ -22,6 +22,12 @@ extern void mandelbrotSerial(
     int maxIterations,
     int output[]);
 
+extern void mandelbrotSerialStep(
+    float x0, float y0, float x1, float y1,
+    int width, int height,
+    int startRow, int step,
+    int maxIterations,
+    int output[]);
 
 //
 // workerThreadStart --
@@ -52,21 +58,15 @@ void workerThreadStart(WorkerArgs * const args) {
     // printf("[thread %d]:\t\t[%.3f] ms\n", args->threadId, (endTime-startTime)*1000);
 
     // 将每行按顺序分配给每个进程，以平均化部分行的任务量过大,即对于较大任务量的部分，每个线程均会处理其中的一行
-    // 在平均任务的基础上，需考虑空间局部性，即均分为更大的块后再进行分配
-    int totalRows = args->height;
-    int taskSize = 4; // 1个任务块包含的行数
-    int groupSize = args->numThreads * taskSize;
+    // 在平均任务的基础上，需考虑空间局部性，即均分为更大的块后再进行分配(其实不用考虑缓存问题，一行1200个元素够了)
 
     double startTime = CycleTimer::currentSeconds();
-    for(int currentRow = args->threadId * taskSize; currentRow < totalRows; currentRow += groupSize) {
-        int numRows = std::min(taskSize, totalRows - currentRow);
-        mandelbrotSerial(args->x0, args->y0, args->x1, args->y1,
+    // 由线程id决定从哪一行开始，间隔step由总线程数量决定，其余参数不变
+    mandelbrotSerialStep(args->x0, args->y0, args->x1, args->y1,
                          args->width, args->height,
-                         currentRow, numRows, args->maxIterations, args->output);
-    }
+                         args->threadId, args->numThreads, args->maxIterations, args->output);
     double endTime = CycleTimer::currentSeconds();
     printf("[thread %d]:\t\t[%.3f] ms\n", args->threadId, (endTime-startTime)*1000);
-
 }
 
 //
@@ -123,5 +123,6 @@ void mandelbrotThread(
     for (int i=1; i<numThreads; i++) {
         workers[i].join();
     }
+    printf("-------------------------------------\n");
 }
 

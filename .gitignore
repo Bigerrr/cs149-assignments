@@ -1,0 +1,82 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pkl
+*.log
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+ENV*/
+Pipfile.lock
+poetry.lock
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# MyPy
+.mypy_cache/
+
+# Pytest
+.cache/
+.pytest_cache/
+
+# VS Code settings
+.vscode/
+
+# === C/C++ ===
+*.out
+*.o
+*.obj
+*.gch
+*.a
+*.so
+*.dll
+*.exe
+
+# CMake build directories
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Compiled static libraries
+*.lib
+*.exp
+
+# Code::Blocks
+*.depend
+*.layout
+
+# Qt Creator
+*.pro.user*
+*.qmake.stash
+
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# === OS/System Files ===
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === General backup/swap ===
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# images  
+*.ppm

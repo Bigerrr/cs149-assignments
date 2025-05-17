@@ -254,38 +254,39 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   __cs149_vec<int> exp, zero, one;
   __cs149_mask maskAll, maskIsZeroExp, maskIsValid, maskNotZeroExp, maskValueOverflow;
 
-  upperLimit = _cs149_vset_float(9.999999f);
+  upperLimit = _cs149_vset_float(9.999999f); // 设置上限常量
 
   for(int i = 0; i < N; i += VECTOR_WIDTH) {
     
-    maskAll = _cs149_init_ones();
-    maskIsZeroExp = _cs149_init_ones(0);
+    maskAll = _cs149_init_ones(); // 所有lane有效
+    maskIsZeroExp = _cs149_init_ones(0); // 初始化为全0
 
-    zero = _cs149_vset_int(0);
-    one = _cs149_vset_int(1);
+    zero = _cs149_vset_int(0); // int向量全0
+    one = _cs149_vset_int(1); // int向量全1
 
     // 标明有效的lane
     if (i + VECTOR_WIDTH >= N) {
-      maskIsValid = _cs149_init_ones(N - i);
+      maskIsValid = _cs149_init_ones(N - i); // 处理最后一组不足VECTOR_WIDTH的情况
     } else {
-      maskIsValid = _cs149_init_ones();
+      maskIsValid = _cs149_init_ones(); // 全部有效
     }
 
     addUserLog("start load base");    
 
-    _cs149_vset_float(result, 1.f, maskIsValid); // result = 1.f
-    _cs149_vload_float(base, values+i, maskIsValid);
+    _cs149_vset_float(result, 1.f, maskIsValid); // result = 1.f，初始化输出
+    _cs149_vload_float(base, values+i, maskIsValid); // 加载输入base
 
     // load valid exp elements
-    _cs149_vload_int(exp, exponents+i, maskIsValid);
+    _cs149_vload_int(exp, exponents+i, maskIsValid); // 加载输入exp
 
-    _cs149_veq_int(maskIsZeroExp, exp, zero, maskIsValid);
+    _cs149_veq_int(maskIsZeroExp, exp, zero, maskIsValid); // 判断exp==0的mask
 
     // _cs149_vset_float(result, 1.f, maskIsZeroExp);
 
     maskNotZeroExp = _cs149_mask_not(maskIsZeroExp); // 注意有效位
-    maskNotZeroExp = _cs149_mask_and(maskNotZeroExp, maskIsValid);
+    maskNotZeroExp = _cs149_mask_and(maskNotZeroExp, maskIsValid); // 只保留有效且exp!=0的lane
 
+    // 计算幂，exp>0时不断累乘
     while(true) {
       if (_cs149_cntbits(maskNotZeroExp) == 0) // if exp == 0
         break;
@@ -296,11 +297,12 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
       _cs149_vlt_int(maskNotZeroExp, zero, exp, maskNotZeroExp); // 0 < exp
     }
 
+    // 检查是否超过上限
     _cs149_vlt_float(maskValueOverflow, upperLimit, result, maskIsValid); // 9.999999f < result
 
     _cs149_vset_float(result, 9.999999f, maskValueOverflow); // result =9.999999f
     
-    _cs149_vstore_float(output + i, result, maskIsValid);
+    _cs149_vstore_float(output + i, result, maskIsValid); // 写回结果
   }
 }
 
