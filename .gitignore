@@ -80,3 +80,6 @@ Desktop.ini
 
 # images  
 *.ppm
+
+# data file
+asst1/prog6_kmeans/data.dat

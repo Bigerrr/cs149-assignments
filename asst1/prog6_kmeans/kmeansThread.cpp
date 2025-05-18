@@ -8,6 +8,8 @@
 
 using namespace std;
 
+const int MAX_THREADS = 16;
+
 typedef struct {
   // Control work assignments
   int start, end;
@@ -18,6 +20,7 @@ typedef struct {
   int *clusterAssignments;
   double *currCost;
   int M, N, K;
+  int threadId, numThreads;
 } WorkerArgs;
 
 
@@ -61,22 +64,20 @@ double dist(double *x, double *y, int nDim) {
   return sqrt(accum);
 }
 
-/**
- * Assigns each data point to its "closest" cluster centroid.
- */
-void computeAssignments(WorkerArgs *const args) {
-  double *minDist = new double[args->M];
-  
-  // Initialize arrays
-  for (int m =0; m < args->M; m++) {
+void workerThreadStart(WorkerArgs *const args, int threadId, double *minDist) {
+  int groupSize = args->M / args->numThreads; // 8个线程下是整除
+  int startPos = threadId * groupSize;
+  int endPos = startPos + groupSize;
+
+  for(int m = startPos; m < endPos; m++) {
     minDist[m] = 1e30;
     args->clusterAssignments[m] = -1;
   }
 
   // Assign datapoints to closest centroids
   for (int k = args->start; k < args->end; k++) {
-    for (int m = 0; m < args->M; m++) {
-      double d = dist(&args->data[m * args->N],
+    for (int m = startPos; m < endPos; m++) { // 此处循环均独立
+      double d = dist(&args->data[m * args->N], // dist调用
                       &args->clusterCentroids[k * args->N], args->N);
       if (d < minDist[m]) {
         minDist[m] = d;
@@ -84,6 +85,44 @@ void computeAssignments(WorkerArgs *const args) {
       }
     }
   }
+}
+
+/**
+ * Assigns each data point to its "closest" cluster centroid.
+ * 实际耗时最长
+ */
+void computeAssignments(WorkerArgs *const args) {
+  double *minDist = new double[args->M];
+
+  std::thread workers[MAX_THREADS];
+
+  for (int i = 1; i < args->numThreads; i++) {
+    workers[i] = std::thread(workerThreadStart, args, i, minDist);
+  }
+
+  workerThreadStart(args, 0, minDist);
+
+  for (int i = 1; i < args->numThreads; i++) {
+    workers[i].join();
+  }
+  
+  // // Initialize arrays 对m个单元初始化
+  // for (int m =0; m < args->M; m++) {
+  //   minDist[m] = 1e30;
+  //   args->clusterAssignments[m] = -1;
+  // }
+
+  // // Assign datapoints to closest centroids
+  // for (int k = args->start; k < args->end; k++) {
+  //   for (int m = 0; m < args->M; m++) { // 此处循环均独立
+  //     double d = dist(&args->data[m * args->N], // dist调用
+  //                     &args->clusterCentroids[k * args->N], args->N);
+  //     if (d < minDist[m]) {
+  //       minDist[m] = d;
+  //       args->clusterAssignments[m] = k;
+  //     }
+  //   }
+  // }
 
   free(minDist);
 }
@@ -93,28 +132,28 @@ void computeAssignments(WorkerArgs *const args) {
  * each cluster.
  */
 void computeCentroids(WorkerArgs *const args) {
-  int *counts = new int[args->K];
+  int *counts = new int[args->K]; // 统计每个聚类包含的点数
 
   // Zero things out
   for (int k = 0; k < args->K; k++) {
     counts[k] = 0;
     for (int n = 0; n < args->N; n++) {
-      args->clusterCentroids[k * args->N + n] = 0.0;
+      args->clusterCentroids[k * args->N + n] = 0.0; // memset优化？
     }
   }
 
 
   // Sum up contributions from assigned examples
-  for (int m = 0; m < args->M; m++) {
+  for (int m = 0; m < args->M; m++) { // 对所有的数据m，将值累加到对应聚类的分量上
     int k = args->clusterAssignments[m];
-    for (int n = 0; n < args->N; n++) {
+    for (int n = 0; n < args->N; n++) { // n个分量都加，或许能并行
       args->clusterCentroids[k * args->N + n] +=
           args->data[m * args->N + n];
     }
     counts[k]++;
   }
 
-  // Compute means
+  // Compute means O(K*N) = O(300)，应该无需优化
   for (int k = 0; k < args->K; k++) {
     counts[k] = max(counts[k], 1); // prevent divide by 0
     for (int n = 0; n < args->N; n++) {
@@ -137,6 +176,7 @@ void computeCost(WorkerArgs *const args) {
   }
 
   // Sum cost for all data points assigned to centroid
+  // O(M)或许可以并行优化
   for (int m = 0; m < args->M; m++) {
     int k = args->clusterAssignments[m];
     accum[k] += dist(&args->data[m * args->N],
@@ -188,6 +228,7 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
   args.M = M;
   args.N = N;
   args.K = K;
+  args.numThreads = 8;
 
   // Initialize arrays to track cost
   for (int k = 0; k < K; k++) {
@@ -197,6 +238,11 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
 
   /* Main K-Means Algorithm Loop */
   int iter = 0;
+
+  double totalAssignTime = 0.f;
+  double totalCentroidTime = 0.f;
+  double totalCostTime = 0.f;
+
   while (!stoppingConditionMet(prevCost, currCost, epsilon, K)) {
     // Update cost arrays (for checking convergence criteria)
     for (int k = 0; k < K; k++) {
@@ -207,12 +253,34 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
     args.start = 0;
     args.end = K;
 
+    // Measure time for computeAssignments
+    auto assignStartTime = CycleTimer::currentSeconds();
     computeAssignments(&args);
+    auto assignEndTime = CycleTimer::currentSeconds();
+    totalAssignTime += assignEndTime - assignStartTime;
+
+    // Measure time for computeCentroids
+    auto centroidStartTime = CycleTimer::currentSeconds();  
     computeCentroids(&args);
+    auto centroidEndTime = CycleTimer::currentSeconds();
+    totalCentroidTime += centroidEndTime - centroidStartTime;
+
+    // Measure time for computeCost
+    auto costStartTime = CycleTimer::currentSeconds();
     computeCost(&args);
+    auto costEndTime = CycleTimer::currentSeconds();
+    totalCostTime += costEndTime - costStartTime;
 
     iter++;
   }
+
+  // 打印总时间和平均每次迭代的时间
+  printf("K-Means converged after %d iterations\n", iter);
+  printf("Total times:\n");
+  printf("  Assignment: %.6f ms\n", totalAssignTime * 1000);
+  printf("  Centroid:   %.6f ms\n", totalCentroidTime * 1000);
+  printf("  Cost:       %.6f ms\n", totalCostTime * 1000);
+  printf("  Total:      %.6f ms\n", (totalAssignTime + totalCentroidTime + totalCostTime) * 1000);
 
   free(currCost);
   free(prevCost);
