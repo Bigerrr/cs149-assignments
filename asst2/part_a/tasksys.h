@@ -92,7 +92,7 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         IRunnable* runnable_;
         int num_threads_;
         int total_num_tasks_;
-        std::atomic<int> cur_task_;
+        std::atomic<int> left_tasks_{-1}; // 用于防止伪唤醒
         std::atomic<int> finished_tasks_;
 
         std::condition_variable cv_worker_;

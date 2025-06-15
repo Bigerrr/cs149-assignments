@@ -257,7 +257,7 @@ void TaskSystemParallelThreadPoolSleeping::threadRun() {
         // 如此在此处进行判断队列非空或是否done
         std::unique_lock<std::mutex> worker_lock(worker_mtx_);
         cv_worker_.wait(worker_lock, [this]() {
-            return cur_task_.load() < total_num_tasks_ || done.load();
+            return left_tasks_ > 0 || done.load();
         });
 
         // automatic get lock again & not empty queue
@@ -265,7 +265,7 @@ void TaskSystemParallelThreadPoolSleeping::threadRun() {
         if (done.load()) break; // end this thread
 
         // get cur_task id
-        int task_id = cur_task_.fetch_add(1);
+        int task_id = total_num_tasks_ - left_tasks_.fetch_sub(1);
         worker_lock.unlock(); // finish to use virtual queue, let other threads to use
         
         runnable_->runTask(task_id, total_num_tasks_);
@@ -289,9 +289,9 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
 
     // 初始化本批tasks的state
     total_num_tasks_ = num_total_tasks;
-    cur_task_ = 0;
-    finished_tasks_ = 0;
+    left_tasks_ = total_num_tasks_;
     runnable_ = runnable;
+    finished_tasks_ = 0; // 最后初始化防止伪唤醒的各种情况
 
     // printf("this batch has total %d tasks\n", num_total_tasks);
 
