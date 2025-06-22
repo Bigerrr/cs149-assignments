@@ -6,6 +6,8 @@
 #include <queue>
 #include <cassert>
 #include <condition_variable>
+#include <atomic>
+#include <functional>
 
 /*
  * TaskSystemSerial: This class is the student's implementation of a

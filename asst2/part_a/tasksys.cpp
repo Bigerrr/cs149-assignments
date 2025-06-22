@@ -266,12 +266,17 @@ void TaskSystemParallelThreadPoolSleeping::threadRun() {
 
         // get cur_task id
         int task_id = total_num_tasks_ - left_tasks_.fetch_sub(1);
+        // printf("left_task=%d\n", left_tasks_.load());
         worker_lock.unlock(); // finish to use virtual queue, let other threads to use
         
+        //printf("do task_%d\n", task_id);
         runnable_->runTask(task_id, total_num_tasks_);
 
+        //printf("finished_tasks = %d\n", finished_tasks_.load());
         // 最后完成本批任务的线程通知run线程
+        //std::unique_lock<std::mutex> finished_lock(finished_mtx_);
         if (finished_tasks_.fetch_add(1) == total_num_tasks_ - 1) {
+            std::lock_guard<std::mutex> finished_lock(finished_mtx_); // 关键！！！
             cv_finished_.notify_all();
         }
     }
@@ -289,9 +294,13 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
 
     // 初始化本批tasks的state
     total_num_tasks_ = num_total_tasks;
-    left_tasks_ = total_num_tasks_;
     runnable_ = runnable;
-    finished_tasks_ = 0; // 最后初始化防止伪唤醒的各种情况
+    finished_tasks_ = 0;
+
+    {
+        std::lock_guard<std::mutex> worker_lock(worker_mtx_);
+        left_tasks_ = total_num_tasks_;  // 最后初始化防止伪唤醒的各种情况
+    }
 
     // printf("this batch has total %d tasks\n", num_total_tasks);
 
@@ -299,12 +308,13 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
     // 成员变量初始化完毕即相当于任务全部放入
 
     cv_worker_.notify_all();
+    //printf("ready to wait\n");
 
     // 检查此批任务是否全部完成
     // 需要最后一个线程通知
     std::unique_lock<std::mutex> finished_lock(finished_mtx_);
     cv_finished_.wait(finished_lock, [this]() {
-        return finished_tasks_ == total_num_tasks_;
+        return finished_tasks_.load() == total_num_tasks_;
     });
 }
 
