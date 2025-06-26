@@ -8,6 +8,8 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include <condition_variable>
+#include <mutex>
 
 /*
  * TaskSystemSerial: This class is the student's implementation of a
