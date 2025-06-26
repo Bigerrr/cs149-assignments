@@ -314,7 +314,7 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
     // 需要最后一个线程通知
     std::unique_lock<std::mutex> finished_lock(finished_mtx_);
     cv_finished_.wait(finished_lock, [this]() {
-        return finished_tasks_.load() == total_num_tasks_;
+        return finished_tasks_.load() >= total_num_tasks_;
     });
 }
 

@@ -43,6 +43,7 @@ build/
 *.so
 *.dll
 *.exe
+*.dSYM/
 
 # CMake build directories
 CMakeFiles/
