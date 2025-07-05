@@ -60,16 +60,8 @@ TaskSystemParallelSpawn::TaskSystemParallelSpawn(int num_threads): ITaskSystem(n
 TaskSystemParallelSpawn::~TaskSystemParallelSpawn() {}
 
 void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
-
-
-    //
-    // TODO: CS149 students will modify the implementation of this
-    // method in Part A.  The implementation provided below runs all
-    // tasks sequentially on the calling thread.
-    //
-
     std::vector<std::thread> threads;
-    std::atomic<int> task_id(0); // current task id, must use value to inital
+    std::atomic<int> task_id(0); // current task id, must initialize
 
     // use for loop to create 'num_threads' threads.
     for (int i = 0; i < num_threads; i++) {
@@ -121,47 +113,36 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
     // (requiring changes to tasksys.h).
     //
 
-    task_counter = 0;
-    this->num_threads = num_threads;
+    this->num_threads_ = num_threads;
 
-    // std::vector<std::thread> threads_pool;
-    // std::queue<std::function<void()>> task_queue;
-
-    // 向线程池中添加线程，执行取任务执行函数
-    // 其中取任务要在队列上加锁防止竞争
-
-    for (int i = 0; i < num_threads; i++) {
-        threads_pool.emplace_back([&]() { // use ref to access queue and lock
-            // check
-            // get queue mutex
-            // no task than release mutex
-            // keep check
-            while(true) { // 对于竞争条件不要放在while循环变量中
-                if (done.load()) break;
-                std::unique_lock<std::mutex> lock(mtx);
-                if (!task_queue.empty()) {
-                    auto task = task_queue.front();
-                    task_queue.pop();
-                    lock.unlock(); // finish to use queue, let other threads to use
-                    
-                    // run the task
-                    assert(task);
-                    task();
-
-                    task_counter++;
-                }
-            }
-        });
+    for (int i = 0; i < num_threads_; i++) {
+        thread_pool_.emplace_back(&TaskSystemParallelThreadPoolSpinning::threadRun, this);
     }
 }
 
 TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {
     // update pool status to done
-    done = true;
+    done_ = true;
 
     // join to wait all threads finish
-    for (auto &t: threads_pool) {
+    for (auto &t: thread_pool_) {
         t.join();
+    }
+}
+
+void TaskSystemParallelThreadPoolSpinning::threadRun() {
+    while(!done_) {
+        std::unique_lock<std::mutex> lock(mtx);
+        if (left_tasks_ <= 0) { // 无任务可用，让出时间片
+            lock.unlock(); // 提前释放提升效率
+            std::this_thread::yield();
+            continue;
+        }
+        int task_id = num_total_tasks_ - left_tasks_.fetch_sub(1);
+        lock.unlock();
+
+        runnable_->runTask(task_id, num_total_tasks_);
+        finished_tasks_++;
     }
 }
 
@@ -174,22 +155,14 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
     // tasks sequentially on the calling thread.
     //
 
-    task_counter = 0;
-
-    // 向线程池任务列表添加task
-    for (int i = 0; i < num_total_tasks; i++) {
-        std::lock_guard<std::mutex> lock(mtx);
-        task_queue.emplace([=]() {
-            runnable->runTask(i, num_total_tasks);
-        });
-    }
+    runnable_ = runnable;
+    num_total_tasks_ = num_total_tasks;
+    finished_tasks_ = 0;
+    left_tasks_ = num_total_tasks_;
 
     // wait for finish
-    while(true) {
-        // atomic int
-        if (task_counter == num_total_tasks) {
-            break;
-        }
+    while(finished_tasks_ < num_total_tasks_) {
+        std::this_thread::yield(); // 让出时间片
     }
 }
 
@@ -215,13 +188,6 @@ const char* TaskSystemParallelThreadPoolSleeping::name() {
 }
 
 TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int num_threads): ITaskSystem(num_threads) {
-    //
-    // TODO: CS149 student implementations may decide to perform setup
-    // operations (such as thread pool construction) here.
-    // Implementations are free to add new class member variables
-    // (requiring changes to tasksys.h).
-    //
-
     // 初始化基本变量并添加线程
     num_threads_ = num_threads;
 
@@ -240,7 +206,11 @@ TaskSystemParallelThreadPoolSleeping::~TaskSystemParallelThreadPoolSleeping() {
     //
 
     // done and notifyAll?
-    done = true;
+    {
+        std::lock_guard<std::mutex> lock(worker_mtx_);
+        done = true;
+    }
+    
     cv_worker_.notify_all();
 
     for(auto &t: thread_pool_) {

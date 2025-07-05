@@ -158,9 +158,8 @@ void TaskSystemParallelThreadPoolSleeping::taskBatchFinished(TaskID task_id) {
     // 检查需要我的任务，并更新其剩余前置依赖数量，为0时则该任务可执行并入队
     for(auto& dep_task_id: task_info->dependent_tasks_) {
         auto& dep_task_info = *task_map_[dep_task_id];
-        dep_task_info.remaining_deps_count_--;
 
-        if (dep_task_info.remaining_deps_count_.load() <= 0) {
+        if (dep_task_info.remaining_deps_count_.fetch_sub(1) <= 1) {
             dep_task_info.task_state_ = TaskState::Ready;
             std::lock_guard<std::mutex> queue_lock(queue_mtx_);
             ready_queue_.push(&dep_task_info);
@@ -180,12 +179,15 @@ bool TaskSystemParallelThreadPoolSleeping::findAvailableTask(TaskBatchInfo*& tas
     // 逐个检查队列中的任务并获取可执行的内部task_id，无剩余任务的任务批次从队列删除
     while(!ready_queue_.empty()) {
         task_info = ready_queue_.front();
+
+        // 因为比较操作非原子，因此先获取值再判断
+        int remaining = task_info->left_tasks_.fetch_sub(1);
         // check task
-        if (task_info->left_tasks_ <= 0) {
+        if (remaining <= 0) {
             ready_queue_.pop();
             continue;
         } else {
-            task_id = task_info->num_total_tasks_- task_info->left_tasks_.fetch_sub(1);
+            task_id = task_info->num_total_tasks_- remaining;
             return true;
         }
     }
