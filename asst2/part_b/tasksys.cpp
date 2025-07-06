@@ -155,18 +155,32 @@ void TaskSystemParallelThreadPoolSleeping::taskBatchFinished(TaskID task_id) {
     auto& task_info = task_map_[task_id];
     task_info->task_state_ = TaskState::Finished;
 
+    // 临时变量暂存新就绪任务，避免更新时反复在队列加锁
+    std::vector<TaskBatchInfo*> new_ready_tasks;
+
     // 检查需要我的任务，并更新其剩余前置依赖数量，为0时则该任务可执行并入队
     for(auto& dep_task_id: task_info->dependent_tasks_) {
         auto& dep_task_info = *task_map_[dep_task_id];
 
         if (dep_task_info.remaining_deps_count_.fetch_sub(1) <= 1) {
             dep_task_info.task_state_ = TaskState::Ready;
-            std::lock_guard<std::mutex> queue_lock(queue_mtx_);
-            ready_queue_.push(&dep_task_info);
-            cv_worker_.notify_all();
+            new_ready_tasks.push_back(&dep_task_info);
         }
     }
 
+    // 批量处理
+    if (!new_ready_tasks.empty()) {
+        {
+            std::lock_guard<std::mutex> queue_lock(queue_mtx_);
+            for(auto* task: new_ready_tasks) {
+                ready_queue_.push(task);
+            }
+        }
+        
+        cv_worker_.notify_all();
+    }
+
+    // 所有任务均完成，通知sync
     if (active_batches_.fetch_sub(1) == 1) { // 等价于active_bathes--和判0
         std::unique_lock<std::mutex> sync_lock(sync_mtx_); // 防止丢通知
         cv_sync_.notify_one();
@@ -203,6 +217,8 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
     //
     num_threads_ = num_threads;
 
+    task_map_.reserve(1000);
+
     for(int i = 0; i < num_threads_; i++) {
         thread_pool_.emplace_back(&TaskSystemParallelThreadPoolSleeping::threadRun, this);
     }
@@ -221,8 +237,8 @@ TaskSystemParallelThreadPoolSleeping::~TaskSystemParallelThreadPoolSleeping() {
     {
         std::lock_guard<std::mutex> queue_lock(queue_mtx_);
         done_ = true;
-        cv_worker_.notify_all();
     }
+    cv_worker_.notify_all();
 
     for(auto &t: thread_pool_) {
         t.join();
