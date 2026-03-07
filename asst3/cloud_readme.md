@@ -7,7 +7,7 @@ For performance testing, you will need to run this assignment on a VM instance o
 
 ## Creating a VM ##
 
-1. Log in to the [AWS EC2 dashboard](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Home). On the top right of the page, make sure you are on the `us-east-1` region.
+1. Log in to the [AWS EC2 dashboard](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Home). On the top right of the page, make sure you are on the same region that you requested the quota for (should be chosen randomly from `us-west-2`, `ap-northeast-1`, `ap-northeast-2`).
 ![Switch Region](handout/switch-region.png?raw=true)
 
 2. Now you're ready to create a VM instance. Click on the button that says `Launch instance`.
@@ -16,21 +16,21 @@ For performance testing, you will need to run this assignment on a VM instance o
 3. Click on `Browse more AMIs` AMI.
 ![Search AMI](handout/search-ami.png)
 
-4. Search for `Deep Learning Base OSS Nvidia Driver GPU` and make sure to select `64-bit (Arm)`.
-![alt text](handout/select-ami.png)
+4. Search for `Deep Learning ARM64 Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) 20250613` (in the `Community AMIs` tab).
+![alt text](handout/select-ami.jpeg)
 
 4. Choose the `g5g.xlarge` instance type.
 ![Instance type](handout/instance-type.png?raw=true)
 
-5. Change the size of the volume to 64 GB to accomodate the packages we will need to install to make the instance functional for the assignment:
-![Storage](handout/storage.png?raw=true)
+5. Change the size of the volume to 65 GiB to accomodate the packages we will need to install to make the instance functional for the assignment:
+![Storage](handout/storage.jpeg?raw=true)
 
 6. You will need a key pair to access your instance. In `Key pair (login)` section, click `Create a new key pair` and give it whatever name you'd like. This will download a keyfile to your computer called `<key_name>.pem` which you will use to login to the VM instance you are about to create. Finally, you can launch your instance.
 ![Key Pair Step 1](handout/keypair-step1.png)
 ![Key Pair Step 2](handout/keypair-step2.png)
 
 7. Confirm all details and launch instance  
-![Confirm](handout/confirm-launch.png)
+![Confirm](handout/confirm-launch.jpeg)
 
 8. Now that you've created your VM, you should be able to __SSH__ into it. You need the public IPv4 DNS name to SSH into it, which you can find by navigating to your instance's page and then clicking the `Connect` button, followed by selecting the SSH tab (note, it may take a moment for the instance to startup and be assigned an IP address):
 ![Connect](handout/connect.png?raw=true)
@@ -46,25 +46,24 @@ ssh -i path/to/key_name.pem ubuntu@<public_dns_name>
 
 ## Setting up the VM environment ##
 
-1. CUDA should be by default installed. You can check the cuda version using `nvidia-smi` and see an output similar to the following. The CUDA version should be **12.4** and the GPU we are using is **NVIDIA T4G**.
+1. CUDA should be by default installed. You can check the cuda version using `nvidia-smi` and see an output similar to the following. The CUDA version should be **12.8** and the GPU we are using is **NVIDIA T4G**.
 ~~~~
-ubuntu@ip-172-31-32-141:~$ nvidia-smi
-Thu Oct 24 21:34:13 2024       
+$ nvidia-smi
+Thu Oct 23 18:22:32 2025
 +-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 550.127.05             Driver Version: 550.127.05     CUDA Version: 12.4     |
+| NVIDIA-SMI 570.133.20             Driver Version: 570.133.20     CUDA Version: 12.8     |
 |-----------------------------------------+------------------------+----------------------+
 | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
 |   0  NVIDIA T4G                     On  |   00000000:00:1F.0 Off |                    0 |
-| N/A   49C    P8             10W /   70W |       1MiB /  15360MiB |      0%      Default |
+| N/A   53C    P8             13W /   70W |       0MiB /  15360MiB |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
-                                                                                         
 +-----------------------------------------------------------------------------------------+
 | Processes:                                                                              |
-|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
 |  No running processes found                                                             |

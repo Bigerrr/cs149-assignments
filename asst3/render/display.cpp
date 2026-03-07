@@ -1,10 +1,10 @@
 #include <algorithm>
 
 #include "circleRenderer.h"
-#include "cycleTimer.h"
+#include "CycleTimer.h"
 #include "image.h"
 #include "platformgl.h"
-
+#include <cstdio>
 
 void renderPicture();
 
@@ -157,7 +157,7 @@ startRendererWithDisplay(CircleRenderer* renderer) {
 
     glutInitWindowSize(gDisplay.width, gDisplay.height);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
-    glutCreateWindow("CMU 15-418 Assignment 2 - Circle Renderer");
+    glutCreateWindow("CS149 Assignment 3 - Circle Renderer");
     glutDisplayFunc(handleDisplay);
     glutKeyboardFunc(handleKeyPress);
     glutMainLoop();

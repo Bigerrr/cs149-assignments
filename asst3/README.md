@@ -1,6 +1,6 @@
 # Assignment 3: A Simple CUDA Renderer
 
-**Due: Fri Nov 8, 11:59PM PST**
+**Due: Thursday Oct 30, 11:59PM PST**
 
 **100 points total**
 
@@ -81,7 +81,7 @@ We want you to implement `find_repeats` by first implementing parallel exclusive
 
 Exlusive prefix sum takes an array `A` and produces a new array `output` that has, at each index `i`, the sum of all elements up to but not including `A[i]`. For example, given the array `A={1,4,6,8,2}`, the output of exclusive prefix sum `output={0,1,5,11,19}`.
 
-The following "C-like" code is an iterative version of scan. In the pseudocode before, we use `parallel_for` to indicate potentially parallel loops. This is the same algorithm we discussed in class: <http://cs149.stanford.edu/fall24/lecture/dataparallel/slide_17>
+The following "C-like" code is an iterative version of scan. In the pseudocode before, we use `parallel_for` to indicate potentially parallel loops. This is the same algorithm we discussed in class: <https://gfxcourses.stanford.edu/cs149/fall25/lecture/dataparallel/slide_17>
 
 ```
 void exclusive_scan_iterative(int* start, int* end, int* output) {
@@ -154,7 +154,7 @@ Scan Score Table:
 -------------------------------------------------------------------------
 ```
 
-This part of the assignment is largely about getting more practice with writing CUDA and thinking in a data parallel manner, and not about performance tuning code. Getting full performance points on this part of the assignment should not require much (or really any) performance tuning, just a direct port of the algorithm pseudocode to CUDA. However, there's one trick: a naive implementation of scan might launch N CUDA threads for each iteration of the parallel loops in the pseudocode, and using conditional execution in the kernel to determine which threads actually need to do work. Such a solution will not be performant! (Consider the last outmost loop iteration of the upsweep phase, where only two threads would do work!). A full credit solution will only launch one CUDA thread for each iteration of the innermost parallel loops.
+This part of the assignment is largely about getting more practice with writing CUDA and thinking in a data parallel manner, and not about performance tuning code. Getting full performance points on this part of the assignment should not require much (or really any) performance tuning, just a direct port of the algorithm pseudocode to CUDA. However, there's one trick: a naive implementation of scan might launch N CUDA threads for each iteration of the parallel loops in the pseudocode, and using conditional execution in the kernel to determine which threads actually need to do work. Such a solution will not be performant! (Consider the last outer-most loop iteration of the upsweep phase, where only two threads would do work!). A full credit solution will only launch one CUDA thread for each iteration of the innermost parallel loops.
 
 **Test Harness:** By default, the test harness runs on a pseudo-randomly generated array that is the same every time
 the program is run, in order to aid in debugging. You can pass the argument `-i random` to run on a random array - we
@@ -288,14 +288,14 @@ Score table:
 --------------------------------------------------------------------------
 | Scene Name      | Ref Time (T_ref) | Your Time (T)   | Score           |
 --------------------------------------------------------------------------
-| rgb             | 0.2698           | (F)             | 0               |
-| rand10k         | 2.7341           | (F)             | 0               |
-| rand100k        | 26.1481          | (F)             | 0               |
-| pattern         | 0.3591           | (F)             | 0               |
-| snowsingle      | 16.1636          | (F)             | 0               |
-| biglittle       | 14.9861          | (F)             | 0               |
-| rand1M          | 188.0086         | (F)             | 0               |
-| micro2M         | 355.9104         | (F)             | 0               |
+| rgb             | 0.2622           | (F)             | 0               |
+| rand10k         | 3.0658           | (F)             | 0               |
+| rand100k        | 29.6144          | (F)             | 0               |
+| pattern         | 0.4043           | (F)             | 0               |
+| snowsingle      | 19.7155          | (F)             | 0               |
+| biglittle       | 15.2422          | (F)             | 0               |
+| rand1M          | 230.478          | (F)             | 0               |
+| micro2M         | 439.9369         | (F)             | 0               |
 --------------------------------------------------------------------------
 |                                    | Total score:    | 0/72            |
 --------------------------------------------------------------------------
@@ -318,14 +318,14 @@ Aspects of your work that you should mention in the write-up include:
 
 ### Grading Guidelines
 
-- The write-up for the assignment is worth 7 points.
-- Your implementation is worth 72 points. These are equally divided into 9 points per scene as follows:
-  - 2 correctness points per scene.
+- The write-up for the assignment is worth 18 points.
+- Your parallel prefix implementation is worth 10 points.
+- Your render implementation is worth 72 points. These are equally divided into 9 points per scene as follows:
+  - 2 correctness points per scene. We will only test your program with image sizes that are multiples of 256.
   - 7 performance points per scene (only obtainable if the solution is correct). Your performance will be graded with respect to the performance of a provided benchmark reference renderer, T<sub>ref</sub>:
     - No performance points will be given for solutions having time (T) 10 times the magnitude of T<sub>ref</sub>.
     - Full performance points will be given for solutions within 20% of the optimized solution ( T <= 1.20 \* T<sub>ref</sub> )
     - For other values of T (for 1.20 T<sub>ref</sub> < T < 10 _ T<sub>ref</sub>), your performance score on a scale 1 to 7 will be calculated as: `7 _ T_ref / T`.
-- Your implementation's performance on the class leaderboard is worth the final 6 points. Submission and grading details for the leaderboard will be detailed in a subsequent Ed post.
 
 - Up to five points extra credit (instructor discretion) for solutions that achieve significantly greater performance than required. Your write up must clearly explain your approach thoroughly.
 - Up to five points extra credit (instructor discretion) for a high-quality parallel CPU-only renderer implementation that achieves good utilization of all cores and SIMD vector units of the cores. Feel free to use any tools at your disposal (e.g., SIMD intrinsics, ISPC, pthreads). To receive credit you should analyze the performance of your GPU and CPU-based solutions and discuss the reasons for differences in implementation choices made.
@@ -334,9 +334,8 @@ So the total points for this project is as follows:
 
 - part 1 (5 points)
 - part 2 (10 points)
-- part 3 write up (7 points)
+- part 3 write up (13 points)
 - part 3 implementation (72 points)
-- part 3 leaderboard (6 points)
 - potential **extra** credit (up to 10 points)
 
 ## Assignment Tips and Hints
@@ -345,7 +344,7 @@ Below are a set of tips and hints compiled from previous years. Note that there 
 
 - There are two potential axes of parallelism in this assignment. One axis is _parallelism across pixels_ another is _parallelism across circles_ (provided the ordering requirement is respected for overlapping circles). Solutions will need to exploit both types of parallelism, potentially at different parts of the computation.
 - The circle-intersects-box tests provided to you in `circleBoxTest.cu_inl` are your friend. You are encouraged to use these subroutines.
-- The shared-memory prefix-sum operation provided in `exclusiveScan.cu_inl` may be valuable to you on this assignment (not all solutions may choose to use it). See the simple description of a prefix-sum [here](https://nvidia.github.io/cccl/thrust/api/function_group__prefixsums_1ga333bd4f34742dcf68d3ac5a0933f67db.html). We
+- The shared-memory prefix-sum operation provided in `exclusiveScan.cu_inl` may be valuable to you on this assignment (not all solutions may choose to use it). See the simple description of a prefix-sum [here](https://docs.nvidia.com/cuda/archive/12.2.1/thrust/index.html#prefix-sums). We
   have provided an implementation of an exclusive prefix-sum on a **power-of-two-sized** arrays in shared memory. **The provided code does not work on non-power-of-two inputs and IT ALSO REQUIRES THAT THE NUMBER OF THREADS IN THE THREAD BLOCK BE THE SIZE OF THE ARRAY. PLEASE READ THE COMMENTS IN THE CODE.**
 - Take a look at the `shadePixel` method that is being called. Notice how it is doing many global memory operations to update the color of a pixel. It might be wise to instead use a local accumulator in your `kernelRenderCircles` method. You can then perform the accumulation of a pixel value in a register, and once the final pixel value is accumulated you can then just perform a single write to global memory.
 - You are allowed to use the [Thrust library](http://thrust.github.io/) in your implementation if you so choose. Thrust is not necessary to achieve the performance of the optimized CUDA reference implementations. There is one popular way of solving the problem that uses the shared memory prefix-sum implementation that we give you. There another popular way that uses the prefix-sum routines in the Thrust library. Both are valid solution strategies.

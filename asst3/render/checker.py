@@ -6,7 +6,8 @@ import json
 import shutil
 import re
 import math
-
+import random
+import platform
 
 perf_pts = 7
 correctness_pts = 2
@@ -58,9 +59,10 @@ def time_log_file(scene):
 
 #### RUNNING THE RENDERERS ####
 def check_correctness(render_cmd, scene):
-    cmd_string = "./%s -c %s -s 1024 -f logs/output > %s" % (
+    cmd_string = "./%s -c %s -s 1024 -S %d -f logs/output > %s" % (
         render_cmd,
         scene,
+        random.randint(0, 100000),
         correctness_log_file(scene),
     )
     # print("Checking correctness: %s" % cmd_string)
@@ -124,7 +126,11 @@ def run_scenes(n_runs):
         if scene in score_scene_names:
             # Do multiple perf runs
             stu_times[scene] = [get_time("render", scene) for _ in range(n_runs)]
-            ref_times[scene] = [get_time("render_ref", scene) for _ in range(n_runs)]
+
+            ref_binary = (
+                "render_ref_x86" if platform.machine() == "x86_64" else "render_ref"
+            )
+            ref_times[scene] = [get_time(ref_binary, scene) for _ in range(n_runs)]
 
             print("[%s] Student times: " % (scene), stu_times[scene])
             print("[%s] Reference times: " % (scene), ref_times[scene])
