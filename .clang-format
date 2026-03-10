@@ -1,0 +1,19 @@
+---
+# 基于基础风格（如 LLVM, Google, Chromium）
+BasedOnStyle: LLVM
+
+# 1. 禁用 Include 自动重排（解决你最大的痛点）
+SortIncludes: false
+
+# 2. 锁定缩进宽度（根据作业源码实际情况调整，通常是 4 或 8）
+IndentWidth: 4
+UseTab: Never  # 强制使用空格，防止 Tab/Space 混用导致的 Git Diff 爆炸
+
+# 3. 限制每行长度（防止自动折行导致的修改）
+ColumnLimit: 0 # 设置为 0 则不限制，clangd 不会强行折行
+
+# 4. 对 CUDA 的特殊支持
+Language: Cpp
+
+PointerAlignment: Left
+---

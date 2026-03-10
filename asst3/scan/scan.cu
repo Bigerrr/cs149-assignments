@@ -27,6 +27,26 @@ static inline int nextPow2(int n) {
     return n;
 }
 
+__global__ void upsweep_kernel(int* array, int num_threads, int two_d) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < num_threads) { // 防止越界，注意判断的是线程索引，而不是数组索引
+        int two_dplus1 = two_d * 2;
+        array[index * two_dplus1 + two_dplus1 - 1] += array[index * two_dplus1 + two_d - 1];
+    }
+}
+
+__global__ void downsweep_kernel(int* array, int num_threads, int two_d) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < num_threads) {
+        int two_dplus1 = two_d * 2;
+        int i = index * two_dplus1;
+
+        int temp = array[i + two_d - 1];
+        array[i + two_d - 1] = array[i + two_dplus1 - 1];
+        array[i + two_dplus1 - 1] += temp;
+    }
+}
+
 // exclusive_scan --
 //
 // Implementation of an exclusive scan on global memory array `input`,
@@ -54,7 +74,31 @@ void exclusive_scan(int* input, int N, int* result)
     // to CUDA kernel functions (that you must write) to implement the
     // scan.
 
+    const int threadsPerBlock = 256;
+    int rounded = nextPow2(N);
+    // cudaMemset(&result[N], 0, sizeof(int) * (rounded - N));
 
+    // up-sweap
+    // 按需计算线程数量，避免过低的wrap内效率
+    // kernel中按当前two_d重新索引位置
+    // 每轮的kernel之间会按顺序等待，因此无需加入显式sync
+    for (int two_d = 1; two_d <= rounded / 2; two_d *= 2) {
+        int two_dplus1 = 2 * two_d;
+        int total_threads = rounded / two_dplus1;
+        int blocks = (total_threads + threadsPerBlock - 1) / threadsPerBlock;
+        upsweep_kernel<<<blocks, threadsPerBlock>>>(result, total_threads, two_d);
+    }
+
+    // set 0
+    cudaMemset(&result[rounded - 1], 0, sizeof(int));
+
+    // downsweep
+    for (int two_d = rounded / 2; two_d >= 1; two_d /= 2) {
+        int two_dplus1 = 2 * two_d;
+        int total_threads = rounded / two_dplus1;
+        int blocks = (total_threads + threadsPerBlock - 1) / threadsPerBlock;
+        downsweep_kernel<<<blocks, threadsPerBlock>>>(result, total_threads, two_d);
+    }
 }
 
 
@@ -140,6 +184,24 @@ double cudaScanThrust(int* inarray, int* end, int* resultarray) {
     return overallDuration; 
 }
 
+__global__ void repeat_kernel(int* input, int* output, int length) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < length - 1) {
+        if (input[index] == input[index+1]) {
+            output[index] = 1;
+        }
+    }
+}
+
+__global__ void scatter_kernel(int *scan, int *output, int length) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < length - 1) {
+        if (scan[index] != scan[index+1]) { // 利用scan前缀和性质反推flag数组
+            int finalIdx = scan[index];
+            output[finalIdx] = index; 
+        }
+    }
+}
 
 // find_repeats --
 //
@@ -160,8 +222,32 @@ int find_repeats(int* device_input, int length, int* device_output) {
     // exclusive_scan function with them. However, your implementation
     // must ensure that the results of find_repeats are correct given
     // the actual array length.
+    const int threadsPerBlock = 256;
 
-    return 0; 
+    const int blocks = (length + threadsPerBlock - 1) / threadsPerBlock;
+
+    int rounded = nextPow2(length);
+
+    int* device_temp;
+    cudaMalloc(&device_temp, sizeof(int)*rounded);
+    // 防止malloc后的垃圾值干扰
+    cudaMemset(device_temp, 0, sizeof(int)*rounded);
+    
+    // generate flag array
+    repeat_kernel<<<blocks, threadsPerBlock>>>(device_input, device_temp, length);
+
+    // 对flag数组求前缀和，得到重复元素的总个数，同时也代表在最后结果数组的索引位置
+    exclusive_scan(device_input, length, device_temp);
+
+    // temp里是scan的前缀和，可反推flag数组，因而传一个输入数组即可
+    scatter_kernel<<<blocks, threadsPerBlock>>>(device_temp, device_output, length);
+
+    // 重复的元素对总数等于前缀和，又因为最后一个元素不可能满足，所以该位置等价于inclusive前缀和结果
+    // CPU无法直接访问GPU内存数组！！！
+    int count;
+    cudaMemcpy(&count, &device_temp[length-1], sizeof(int), ::cudaMemcpyDeviceToHost);
+
+    return count; 
 }
 
 
