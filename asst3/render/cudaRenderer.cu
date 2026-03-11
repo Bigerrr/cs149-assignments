@@ -14,6 +14,8 @@
 #include "sceneLoader.h"
 #include "util.h"
 
+#include "circleBoxTest.cu_inl"
+
 #define DEBUG
 
 #ifdef DEBUG
@@ -30,6 +32,12 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
 #else
 #define cudaCheckError(ans) ans
 #endif
+
+constexpr int BLOCK_DIM = 16;
+constexpr int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
+
+#define SCAN_BLOCK_DIM   BLOCK_SIZE  // needed by sharedMemExclusiveScan implementation
+#include "exclusiveScan.cu_inl"
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Putting all the cuda kernels here
@@ -402,42 +410,71 @@ shadePixel(int circleIndex, float2 pixelCenter, float3 p, float4* imagePtr) {
 // ensure order of update or mutual exclusion on the output image, the
 // resulting image will be incorrect.
 __global__ void kernelRenderCircles() {
+    __shared__ uint flag[BLOCK_SIZE];
+    __shared__ uint offset[BLOCK_SIZE];
+    __shared__ uint scratch[2 * BLOCK_SIZE];
+    __shared__ int inBoxCircles[BLOCK_SIZE];
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    int imageWidth = cuConstRendererParams.imageWidth;
+    int imageHeight = cuConstRendererParams.imageHeight;
 
-    short imageWidth = cuConstRendererParams.imageWidth;
-    short imageHeight = cuConstRendererParams.imageHeight;
+    float invWidth = 1.f / imageWidth;
+    float invHeight = 1.f / imageHeight;
+
+    // kernel启动时有向上取整，因此边界的box，top或right可能越界
+    // 默认分辨率1024可整除则没大问题，但保险起见
+    // todo 像素边界问题，无需-1
+    int boxL = blockIdx.x * BLOCK_DIM;
+    int boxB = blockIdx.y * BLOCK_DIM;
+    int boxR = min(boxL + BLOCK_DIM, imageWidth);
+    int boxT = min(boxB + BLOCK_DIM, imageHeight);
+
+    float normBoxL = invWidth * boxL;
+    float normBoxR = invWidth * boxR;
+    float normBoxB = invHeight * boxB;
+    float normBoxT = invHeight * boxT;
+
+    int pixelX = boxL + threadIdx.x;
+    int pixelY = boxB + threadIdx.y;
+
+    int stride = BLOCK_SIZE;
+    int tid = blockDim.x * threadIdx.y + threadIdx.x; // block内线程id
     int numCircles = cuConstRendererParams.numCircles;
 
-    if (index >= imageHeight * imageWidth)
-        return;
-
-    for (int i = 0; i < numCircles; i++) {
-        int index3 = 3 * i;
-        float3 p = *(float3*)(&cuConstRendererParams.position[index3]);
-        float  rad = cuConstRendererParams.radius[i];
-
-        short minX = static_cast<short>(imageWidth * (p.x - rad));
-        short maxX = static_cast<short>(imageWidth * (p.x + rad)) + 1;
-        short minY = static_cast<short>(imageHeight * (p.y - rad));
-        short maxY = static_cast<short>(imageHeight * (p.y + rad)) + 1;
-
-        float invWidth = 1.f / imageWidth;
-        float invHeight = 1.f / imageHeight;
-    
-        int pixelX = index % imageWidth;
-        int pixelY = index / imageWidth;
-
-        if (pixelX < minX || pixelX > maxX || pixelY < minY || pixelY > maxY) {
-            continue;
+    for (int i = 0; i < numCircles; i += stride) {
+        int circleIdx = i + tid;
+        if (circleIdx < numCircles) {
+            int index3 = 3 * circleIdx;
+            float3 p = *(float3*)(&cuConstRendererParams.position[index3]);
+            float  rad = cuConstRendererParams.radius[circleIdx];
+            // 粗筛+细筛确认有交集，&&短路运算减少运算量
+            // 参数是坐标，不是像素位置
+            flag[tid] = circleInBoxConservative(p.x, p.y, rad, normBoxL, normBoxR, normBoxT, normBoxB) &&
+                        circleInBox(p.x, p.y, rad, normBoxL, normBoxR, normBoxT, normBoxB);
+        } else {
+            flag[tid] = 0; // todo潜在的越界导致？每次都按flag完整填充算，但是之前的写法最后的一轮中，后面的flag值无效且为清空，导致虚假的circle索引
         }
+        __syncthreads();
 
-        float4* imgPtr = (float4*)(&cuConstRendererParams.imageData[4 * (pixelY * imageWidth + pixelX)]);
-        float2 pixelCenterNorm = make_float2(invWidth * (static_cast<float>(pixelX) + 0.5f),
-                                             invHeight * (static_cast<float>(pixelY) + 0.5f));
-        shadePixel(i, pixelCenterNorm, p, imgPtr);
+        sharedMemExclusiveScan(tid, flag, offset, scratch, BLOCK_SIZE);
+        if (flag[tid] == 1) {
+            inBoxCircles[offset[tid]] = circleIdx;
+        }
+        __syncthreads();
+
+        int numInBoxCircles = offset[BLOCK_SIZE-1] + flag[BLOCK_SIZE-1];
+
+        if (pixelX < imageWidth && pixelY < imageHeight) {
+            for (int i = 0; i < numInBoxCircles; i++) {
+                int circleIdx = inBoxCircles[i]; // 当前遍历circle的全局idx
+                float3 p = *(float3*)(&cuConstRendererParams.position[3*circleIdx]); 
+                float4* imgPtr = (float4*)(&cuConstRendererParams.imageData[4 * (pixelY * imageWidth + pixelX)]);
+                float2 pixelCenterNorm = make_float2(invWidth * (static_cast<float>(pixelX) + 0.5f),
+                                                    invHeight * (static_cast<float>(pixelY) + 0.5f));
+                shadePixel(circleIdx, pixelCenterNorm, p, imgPtr); 
+            }
+        }
     }
-
     // int index3 = 3 * index;
 
     // // read position and radius
@@ -682,11 +719,12 @@ CudaRenderer::advanceAnimation() {
 
 void
 CudaRenderer::render() {
-    int pixels = image->height * image->width;
     // 256 threads per block is a healthy number
-    dim3 blockDim(256, 1);
-    // version 1 像素级并行
-    dim3 gridDim((pixels + blockDim.x - 1) / blockDim.x);
+    dim3 blockDim(BLOCK_DIM, BLOCK_DIM);
+    // version 2 平面分为block后，仍是像素级并行，但是每个block内配合先把自己对应的circle数组算出来
+    // x对应于横向，y对应于纵向,防止之后核函数内考虑row,col而混乱
+    dim3 gridDim((image->width + BLOCK_DIM - 1) / BLOCK_DIM,
+                 (image->height + BLOCK_DIM - 1) / BLOCK_DIM);
 
     kernelRenderCircles<<<gridDim, blockDim>>>();
     cudaCheckError(cudaDeviceSynchronize());
